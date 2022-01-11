@@ -23,13 +23,18 @@ on:
         default: true
         required: false
         type: boolean
+      cache:
+        description: Enable cache for Docker Buildx
+        default: true
+        required: false
+        type: boolean
       push-on-tags:
         description: Push the image on a tag push
         required: false
         default: true
         type: boolean
       push:
-        description: Specifies whether to push the image (not viable with push-on-tags==true)
+        description: Set to true to push docker images unconditionally (by default only for tag commit)
         required: false
         type: boolean
       build-args:
@@ -76,15 +81,15 @@ on:
 jobs:
   pre:
     name: Prepare
-    runs-on: ${{ inputs.runs-on }}
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
     outputs:
       image: ${{ steps.set.outputs.image }}
       registry: ${{ steps.set.outputs.registry }}
       username: ${{ steps.set.outputs.username }}
       push: ${{ steps.set.outputs.push }}
+      self-hosted: ${{ steps.set.outputs.push }}
     steps:
-      -
-        uses: actions/github-script@v5
+      - uses: actions/github-script@v5
         id: set
         with:
           script: |
@@ -93,6 +98,13 @@ jobs:
             const imageName = '${{ github.event.repository.name }}'.toLowerCase().replace(/\/docker-/, '/')
             const repoPaths = '${{ inputs.repository }}'.split('/')
             const push = '${{ inputs.push-on-tags && startsWith(github.ref, 'refs/tags/') || inputs.push }}'
+
+            // selfHosted mode is set when runs-on is a list
+            let selfHosted = false
+            if (typeof(JSON.parse('${{ inputs.runs-on }}')) != "string") {
+              selfHosted = true
+            }
+
             let imageRegistry = ''
 
             // input repository first path part looks like an URL (ex. gcr.io which contains .)
@@ -109,6 +121,7 @@ jobs:
             core.setOutput('image', imagePaths.join('/'))
             core.setOutput('registry', imageRegistry)
             core.setOutput('push', push)
+            core.setOutput('self-hosted', selfHosted)
 
             // autoset username for GCR
             if (imageRegistry.endsWith('gcr.io')) {
@@ -120,7 +133,7 @@ jobs:
 
   build:
     name: Build and Push
-    runs-on: ${{ inputs.runs-on }}
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
     needs: [pre]
 
     outputs:
@@ -128,16 +141,14 @@ jobs:
 
     steps:
       - uses: actions/checkout@v2
-      -
-        if: inputs.auto-latest == 'true'
+      - if: inputs.auto-latest
         id: latest
         uses: dysnix/find-latest-tag@v1
         with:
           regex: '^v\d'
           compared-to-tag: ${{ github.ref }}
           repository: ${{ github.repository }}
-      -
-        name: Docker meta
+      - name: Docker meta
         id: meta
         uses: docker/metadata-action@v3
         with:
@@ -147,10 +158,9 @@ jobs:
           tags: |
             type=ref,event=tag
             type=ref,event=branch
-      -
-        name: Set up Docker Buildx
+      - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1
-      -
+      - if: inputs.cache
         name: Cache Docker layers
         uses: actions/cache@v2
         with:
@@ -158,18 +168,16 @@ jobs:
           key: ${{ runner.os }}-buildx-${{ github.sha }}
           restore-keys: |-
             ${{ runner.os }}-buildx-${{ github.event.before }}
-      -
-        if: needs.pre.outputs.push == 'true' && inputs.gcloud-auth != 'true'
+      - if: needs.pre.outputs.push == 'true' && !inputs.gcloud-auth
         uses: docker/login-action@v1
         with:
           registry: ${{ needs.pre.outputs.registry }}
           username: ${{ needs.pre.outputs.username }}
           password: ${{ secrets.password }}
       -
-        if: needs.pre.outputs.push == 'true' && inputs.gcloud-auth == 'true'
+        if: needs.pre.outputs.push == 'true' && needs.pre.outputs.self-hosted == 'true' && inputs.gcloud-auth
         run: gcloud auth configure-docker --quiet
-      -
-        name: Build and push
+      - name: Build and push
         uses: docker/build-push-action@v2
         with:
           context: ${{ inputs.context }}
@@ -183,8 +191,9 @@ jobs:
             ${{ inputs.labels }}
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache-new
-      -
-        # Temp fix
+          secrets: ${{ secrets.secrets }}
+          secret-files: ${{ inputs.secrets }}
+      - # Temp fix
         # https://github.com/docker/build-push-action/issues/252
         # https://github.com/moby/buildkit/issues/1896
         name: Move cache
