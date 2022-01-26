@@ -242,7 +242,8 @@ jobs:
           cache-from: ${{ needs.pre.outputs.cache-from }}
           cache-to: ${{ needs.pre.outputs.cache-to }}
           secrets: ${{ secrets.secrets }}
-          secret-files: ${{ inputs.secrets }}
+          secret-files: ${{ inputs.secret-files }}
+          build-args: ${{ inputs.build-args }}
       -
         id: details
         if: always()
