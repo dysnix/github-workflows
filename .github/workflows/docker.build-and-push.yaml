@@ -124,8 +124,8 @@ jobs:
         with:
           script: |
             //js
-            const imageRepo = '${{ github.event.repository.owner.login }}'.toLowerCase().replace(/\/docker-/, '/')
-            const imageName = '${{ github.event.repository.name }}'.toLowerCase().replace(/\/docker-/, '/')
+            const imageRepo = '${{ github.event.repository.owner.login }}'.toLowerCase()
+            const imageName = '${{ github.event.repository.name }}'.toLowerCase().replace(/^docker-/, '')
             const repoPaths = '${{ inputs.repository }}'.split('/')
             const push = '${{ inputs.push-on-tags && startsWith(github.ref, 'refs/tags/') || inputs.push }}'
 
