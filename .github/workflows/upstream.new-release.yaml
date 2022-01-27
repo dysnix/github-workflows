@@ -1,0 +1,42 @@
+name: Check for releases
+on:
+  workflow_call:
+    inputs:
+      version-regex:
+        description: Version regex to filter versions
+        required: false
+        type: string
+      upstream:
+        description: Upstream repository to look for the new versions
+        required: true
+        type: string
+    outputs:
+      version:
+        description: Version tag of the latest release (the one being published)
+        value: ${{ jobs.upstream.outputs.version }}
+      publish:
+        description: Specifiy whether an upstream release is to be published
+        value: ${{ jobs.upstream.outputs.needs-release }}
+
+jobs:
+  upstream:
+    name: Find an upstream release to publish locally
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.upstream.outputs.tag }}
+      needs-release: ${{ steps.latest.outputs.newer == 'true' || steps.latest.outputs.tag == '' }}
+    steps:
+      - uses: actions/checkout@v2
+      -
+        uses: dysnix/find-latest-tag@v1
+        id: upstream
+        with:
+          regex: ${{ inputs.version-regex }}
+          repository: ${{ inputs.upstream }}
+      -
+        uses: dysnix/find-latest-tag@v1
+        id: latest
+        with:
+          compared-to-tag: ${{ steps.upstream.outputs.tag }}
+          regex: ${{ inputs.version-regex }}
+          repository: ${{ github.repository }}
