@@ -24,19 +24,20 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.upstream.outputs.tag }}
-      needs-release: ${{ steps.latest.outputs.newer == 'true' || steps.latest.outputs.tag == '' }}
+      ## Current repo latest is older than than upstream (or our repo has no tags)
+      needs-release: ${{ steps.current.outputs.older == 'true' || steps.current.outputs.tag == '' }}
     steps:
       - uses: actions/checkout@v2
       -
         uses: dysnix/find-latest-tag@v1
         id: upstream
         with:
-          regex: ${{ inputs.version-regex }}
           repository: ${{ inputs.upstream }}
-      -
-        uses: dysnix/find-latest-tag@v1
-        id: latest
-        with:
-          compared-to-tag: ${{ steps.upstream.outputs.tag }}
           regex: ${{ inputs.version-regex }}
+      -
+        uses: dysnix/find-latest-tag@v2
+        id: current
+        with:
           repository: ${{ github.repository }}
+          regex: ${{ inputs.version-regex }}
+          compare-to: ${{ steps.upstream.outputs.tag }}
