@@ -31,17 +31,25 @@ on:
       package-name:
         description: Package name from package.json
         value: ${{ jobs.publish.outputs.package-name }}
+      package-version:
+        description: Package version
+        value: ${{ jobs.publish.outputs.package-version }}
       published:
-        description: Indicates whether an NPM package has been published
+        description: Package has been published true/false
         value: ${{ jobs.publish.outputs.published }}
+      status:
+        description: Publishing failed/succeeded
+        value: ${{ jobs.publish.outputs.status }}
 
 jobs:
   publish:
     name: Build NPM package
     runs-on: ubuntu-latest
     outputs:
+      package-version: ${{ steps.info.outputs.version }}
       package-name: ${{ steps.info.outputs.name }}
       published: ${{ steps.status.outputs.published }}
+      status: ${{ steps.status.outputs.status }}
 
     steps:
       - uses: actions/checkout@v2
@@ -73,6 +81,14 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.token }}
       -
         name: Publish status
-        if: always()
         id: status
-        run: echo '::set-output name=published::${{ job.status == 'success' }}'
+        if: always()
+        uses: actions/github-script@v5
+        with:
+          script: |
+            core.setOutput('published', '${{ job.status == 'success' }}')
+            if (${{ job.status == 'success' }}) {
+              core.setOutput('status', 'succeeded')
+            } else if (${{ job.status == 'failure' }}) {
+              core.setOutput('status', 'failed')
+            }
